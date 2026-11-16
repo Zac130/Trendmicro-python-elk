@@ -121,6 +121,9 @@ Arguments:
 
 **"C:\Users\<USERNAME>\Desktop\SOC\SOC.py"**
 **Project Status**
+
+
+
 ✅ Trend Micro API Connected
 
 ✅ Python Collector Operational
