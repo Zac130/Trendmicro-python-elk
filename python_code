@@ -1,0 +1,107 @@
+import requests
+import socket
+import json
+import time
+from datetime import datetime
+
+# Trend Micro API Key
+API_KEY = "********************"
+
+# ELK Server
+ELK_IP = "IP_Address"
+ELK_PORT = 5515
+
+# Create UDP Socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Store already-sent alert IDs
+sent_ids = set()
+
+while True:
+
+    try:
+
+        print("\n" + "=" * 60)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting collection")
+
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Accept": "application/json"
+        }
+
+        url = "https://api.sg.xdr.trendmicro.com/v3.0/workbench/alerts"
+
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=30
+        )
+
+        print("Status:", response.status_code)
+
+        data = response.json()
+
+        if "items" not in data:
+            print("API Response Error:")
+            print(json.dumps(data, indent=2))
+            print("Waiting 5 minutes...")
+            time.sleep(300)
+            continue
+
+        total_alerts = len(data["items"])
+
+        print(f"Received {total_alerts} alerts")
+
+        sent_count = 0
+
+        for alert in data["items"]:
+
+            alert_id = alert.get("id")
+
+            # Skip duplicate alerts already sent
+            if alert_id in sent_ids:
+                continue
+
+            sent_ids.add(alert_id)
+
+            log = {
+                "@timestamp": alert.get("createdDateTime"),
+
+                "vendor": "TrendMicro",
+                "source": "trendmicro",
+
+                "alert_id": alert.get("id"),
+                "incident_id": alert.get("incidentId"),
+                "case_id": alert.get("caseId"),
+
+                "severity": alert.get("severity"),
+                "status": alert.get("status"),
+
+                "model": alert.get("model"),
+                "model_type": alert.get("modelType"),
+                "alert_provider": alert.get("alertProvider"),
+
+                "score": alert.get("score"),
+
+                "investigation_status": alert.get("investigationStatus"),
+                "investigation_result": alert.get("investigationResult"),
+
+                "createdDateTime": alert.get("createdDateTime"),
+                "updatedDateTime": alert.get("updatedDateTime")
+            }
+
+            sock.sendto(
+                json.dumps(log).encode(),
+                (ELK_IP, ELK_PORT)
+            )
+
+            sent_count += 1
+
+        print(f"Sent {sent_count} new alerts to ELK")
+        print(f"Cached alert IDs: {len(sent_ids)}")
+
+    except Exception as e:
+        print("Error:", str(e))
+
+    print("Waiting 5 minutes...")
+    time.sleep(300)
